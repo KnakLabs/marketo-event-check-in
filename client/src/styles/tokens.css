@@ -1,0 +1,88 @@
+/* Knak Marketing Design System — colors, type, spacing tokens
+   (trimmed to what this app uses; source: Knak Marketing Design System.zip) */
+
+/* Space Grotesk (SIL Open Font License — see assets/fonts/SpaceGrotesk-OFL.txt)
+   stands in for the original Telegraf license, which isn't clear to
+   redistribute in a public repo. One variable-font file covers every
+   weight this app uses, via the font-weight range below. */
+@font-face {
+  font-family: "Space Grotesk";
+  src: url("../assets/fonts/SpaceGrotesk-Variable.ttf") format("truetype-variations");
+  font-weight: 400 700;
+  font-display: swap;
+}
+
+:root {
+  --knak-ink: #19191b;
+  --knak-ink-2: #1c1b1f;
+  --knak-ink-3: #25252a;
+  --knak-ink-deep: #0f0f11;
+
+  --knak-blue: #058df5;
+  --knak-blue-700: #0470c8;
+  --knak-blue-300: #6dbffb;
+  --knak-blue-100: #cde8fe;
+
+  --knak-lime: #a8d000;
+  --knak-lime-700: #87a800;
+  --knak-lime-300: #c7e25c;
+  --knak-lime-100: #ecf5c2;
+
+  --knak-smoothie: linear-gradient(135deg, #058df5 0%, #4fafe0 35%, #a8d000 100%);
+  --knak-smoothie-glow: radial-gradient(
+    60% 80% at 50% 0%,
+    rgba(5, 141, 245, 0.55) 0%,
+    rgba(168, 208, 0, 0.35) 45%,
+    rgba(25, 25, 27, 0) 85%
+  );
+
+  --knak-white: #ffffff;
+  --knak-fog: #f6f6f6;
+  --knak-mist: #ececee;
+  --knak-stone: #d9d9d9;
+  --knak-graphite: #4c4a4a;
+  --knak-charcoal: #222222;
+
+  --bg: var(--knak-ink);
+  --bg-elev: var(--knak-ink-3);
+  --bg-page: var(--knak-ink-deep);
+
+  --fg-1: rgba(255, 255, 255, 0.92);
+  --fg-2: rgba(255, 255, 255, 0.72);
+  --fg-3: rgba(255, 255, 255, 0.52);
+  --fg-4: rgba(255, 255, 255, 0.32);
+
+  --line: rgba(255, 255, 255, 0.08);
+  --line-strong: rgba(255, 255, 255, 0.16);
+
+  --accent: var(--knak-lime);
+  --accent-2: var(--knak-blue);
+  --accent-fg: var(--knak-ink);
+
+  --success: #079f44;
+  --warning: #ffd84e;
+  --danger: #fc461e;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.25);
+  --shadow-md: 0 4px 20px rgba(0, 0, 0, 0.25);
+  --shadow-lg: 0 15px 51px rgba(0, 0, 0, 0.25);
+  --shadow-glow: 0 0 60px rgba(5, 141, 245, 0.35), 0 0 120px rgba(168, 208, 0, 0.18);
+
+  --r-xs: 6px;
+  --r-sm: 10px;
+  --r-md: 16px;
+  --r-lg: 24px;
+  --r-xl: 32px;
+  --r-pill: 999px;
+
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 24px;
+  --s-6: 32px;
+  --s-7: 48px;
+
+  --font-display: "Space Grotesk", "Inter", system-ui, sans-serif;
+  --font-body: "Space Grotesk", "Inter", system-ui, sans-serif;
+}
