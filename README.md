@@ -22,13 +22,15 @@ system, synced to a Marketo program.
    and lists them under the **Registered** tab.
 3. **Check In** — tap a registrant to move them to **Checked-In**. They're
    tagged `Registered`.
-4. **Add walk-in** (the `+` button) — check in someone who never registered.
+4. **Scan a badge** (the camera button) — scan a QR code to check someone
+   in instantly, no search needed. See "QR code check-in" below.
+5. **Add walk-in** (the `+` button) — check in someone who never registered.
    Email is the first field: leave it and the form auto-fills their name
    and company if Marketo already knows them. See "Walk-in email lookup"
    below. They land in **Checked-In** tagged `Unregistered`.
-5. **Undo** — moves a checked-in registrant back to Registered; removes a
+6. **Undo** — moves a checked-in registrant back to Registered; removes a
    walk-in entirely.
-6. **Sync to Marketo** (after the event) —
+7. **Sync to Marketo** (after the event) —
    - Everyone in **Checked-In** → Program Member status `Attended`
      (walk-ins are created/matched as Marketo leads and added to the
      program at this point).
@@ -43,6 +45,39 @@ matching (Fuse.js), so a typo like "Chenn" still finds "Chen", or
 
 State lives in `server/data/event-state.json` — safe to delete between
 events to start fresh (or use `POST /api/state/reset`).
+
+## QR code check-in
+
+Alongside manual search and walk-ins, attendees can be checked in by
+scanning a QR code (e.g. from a badge) — a camera icon next to the
+walk-in `+` button opens the scanner. A successful scan shows
+"{{Full Name}} Checked-In" on screen immediately.
+
+**What's encoded**: `knak-marketo-id=<marketoLeadId>` — just the
+Marketo Lead ID, nothing else (no name, no email).
+
+Why not encode more than the id:
+
+- The app already has every registrant's name in memory the moment
+  they're pulled from Marketo, so looking the name up locally by id is
+  exactly as instant as reading it out of the QR — there's no API call
+  either way, and no reason to duplicate data that's already there.
+- Trusting a name baked into the QR is a staleness risk: if someone's
+  name is corrected in Marketo after their badge is printed, a name
+  embedded in the code would show the wrong thing forever, while a
+  live local lookup is always as current as the last pull.
+- Looking the id up against the currently-loaded attendee list means a
+  scan is actually *verified* against who's registered for this event,
+  not just blindly trusted — a QR that doesn't match anyone in the
+  current list surfaces a clear "not found" state instead of silently
+  checking someone in on unverified data.
+
+Why the `knak-marketo-id=` prefix specifically: a bare number is a
+collision risk — any unrelated QR code in the world that happens to
+decode to a number could accidentally match a real lead id and check
+the wrong person in. The prefix lets the scanner recognize and act
+only on QR codes this app actually generated, and cleanly ignore
+everything else.
 
 ## Walk-in email lookup
 
