@@ -4,6 +4,7 @@ import { api, AuthError, NetworkError, getCurrentProgram } from "./api.js";
 import { enqueue, getQueue, drainQueue } from "./offlineQueue.js";
 import PersonRow from "./components/PersonRow.jsx";
 import WalkInModal from "./components/WalkInModal.jsx";
+import QrScanModal from "./components/QrScanModal.jsx";
 import SyncModal from "./components/SyncModal.jsx";
 import EventPicker from "./components/EventPicker.jsx";
 import LoginScreen from "./components/LoginScreen.jsx";
@@ -19,12 +20,18 @@ function useToast() {
   return [message, setMessage];
 }
 
+// See README "QR code check-in" — only the Marketo lead id is encoded,
+// prefixed so the scanner can recognize a code this app actually
+// generated and ignore anything else.
+const QR_PREFIX = "knak-marketo-id=";
+
 export default function App() {
   const [state, setState] = useState(null);
   const [tab, setTab] = useState("registered");
   const [query, setQuery] = useState("");
   const [pulling, setPulling] = useState(false);
   const [showWalkIn, setShowWalkIn] = useState(false);
+  const [showScanner, setShowScanner] = useState(false);
   const [showSync, setShowSync] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState(null);
@@ -274,6 +281,28 @@ export default function App() {
     }
   }
 
+  // The name shown in the confirmation always comes from this device's
+  // own already-pulled registrant list, never from the code itself, so a
+  // scan is verified against who's actually registered for this event
+  // rather than trusted blindly. Synchronous and instant: no API call
+  // needed for the lookup, only for the check-in itself, which runs the
+  // same as a tap and gets the same offline handling.
+  function handleScan(text) {
+    if (!text.startsWith(QR_PREFIX)) {
+      return { status: "error", message: "Not a recognized check-in code" };
+    }
+
+    const id = text.slice(QR_PREFIX.length).trim();
+    const person = state?.people?.[id];
+    if (!person) {
+      return { status: "error", message: "Not found — pull registrants or add as walk-in" };
+    }
+
+    handleCheckIn(id);
+    const name = `${person.firstName} ${person.lastName}`.trim() || person.email;
+    return { status: "success", message: `${name} Checked-In` };
+  }
+
   // Sync is never queued for later like check-ins/undos are — it's a
   // deliberate, one-time push to Marketo that a staff member watches the
   // result of, not something that should run silently once connectivity
@@ -407,12 +436,19 @@ export default function App() {
         ))}
       </div>
 
+      <button className="fab fab--camera" onClick={() => setShowScanner(true)} aria-label="Scan a badge">
+        📷
+      </button>
       <button className="fab" onClick={() => setShowWalkIn(true)} aria-label="Add walk-in">
         +
       </button>
 
       {showWalkIn && (
         <WalkInModal onClose={() => setShowWalkIn(false)} onSubmit={handleWalkIn} onLookupEmail={handleLookupEmail} />
+      )}
+
+      {showScanner && (
+        <QrScanModal onScan={handleScan} onClose={() => setShowScanner(false)} />
       )}
 
       {showSync && (
