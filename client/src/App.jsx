@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import Fuse from "fuse.js";
 import { api, AuthError, NetworkError, getCurrentProgram } from "./api.js";
 import { enqueue, getQueue, drainQueue } from "./offlineQueue.js";
-import PersonRow from "./components/PersonRow.jsx";
+import PersonRow, { formatTime } from "./components/PersonRow.jsx";
 import WalkInModal from "./components/WalkInModal.jsx";
 import QrScanModal from "./components/QrScanModal.jsx";
 import SyncModal from "./components/SyncModal.jsx";
@@ -180,11 +180,15 @@ export default function App() {
   // never reached the server — applying it eagerly for every error would
   // leave the UI showing success for a genuine rejection too, uncorrected
   // until the next poll happens to run.
+  // Returns what happened so a caller that shows its own confirmation — the
+  // scanner — can report the truth rather than assume success. The tile button
+  // ignores it and reads the toast, as before.
   async function handleCheckIn(id) {
     const programId = state.programId;
     try {
       await api.checkIn(id, programId);
       await refresh();
+      return { ok: true };
     } catch (err) {
       if (err instanceof NetworkError) {
         applyLocally((prev) => {
@@ -195,9 +199,10 @@ export default function App() {
         enqueue({ type: "checkin", personId: id, programId });
         setPendingCount(getQueue().length);
         setToast("Offline — check-in saved, will sync once back online");
-      } else {
-        handleError(err);
+        return { ok: true, offline: true };
       }
+      handleError(err);
+      return { ok: false, message: err.message };
     }
   }
 
@@ -298,9 +303,34 @@ export default function App() {
       return { status: "error", message: "Not found — pull registrants or add as walk-in" };
     }
 
-    handleCheckIn(id);
     const name = `${person.firstName} ${person.lastName}`.trim() || person.email;
-    return { status: "success", message: `${name} Checked-In` };
+
+    // Checking someone in again overwrites checkedInAt, which is the arrival
+    // time the Marketo sync reports, so a second scan reports their time
+    // instead of rewriting it. Scanning the same badge twice at a busy door is
+    // the ordinary mistake, and the tile button can't make it — it only
+    // renders on the Registered tab.
+    //
+    // This reads status out of the people map, which only refreshes once the
+    // check-in below has been round-tripped, so `settled` has to be waited on
+    // before the scanner looks again or a second scan on a slow connection
+    // reads a stale "registered" and overwrites the time this guard protects.
+    if (person.status === "checked-in") {
+      return { status: "success", message: `${name} — already checked in ${formatTime(person.checkedInAt)}` };
+    }
+
+    // The name resolves locally and instantly, so it is shown straight away and
+    // the outcome replaces it. Staff can see they scanned the right badge
+    // without waiting for the network to agree.
+    return {
+      status: "pending",
+      message: `${name} — checking in…`,
+      settled: handleCheckIn(id).then((outcome) => {
+        if (!outcome.ok) return { status: "error", message: `${name} — ${outcome.message}` };
+        if (outcome.offline) return { status: "success", message: `${name} — saved offline` };
+        return { status: "success", message: `${name} Checked-In` };
+      }),
+    };
   }
 
   // Sync is never queued for later like check-ins/undos are — it's a

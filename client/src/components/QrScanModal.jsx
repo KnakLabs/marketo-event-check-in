@@ -49,10 +49,18 @@ export default function QrScanModal({ onScan, onClose }) {
     // Scanning pauses while a result is on screen so the same code isn't
     // decoded a dozen times a second while still in frame, then resumes on
     // its own once the result clears.
-    function handleDecode(text) {
+    // A result carrying `settled` is still in flight: show it, wait for the
+    // real outcome, and only start the display timer then. Resuming earlier
+    // would let the next scan read state the check-in hasn't updated yet.
+    async function handleDecode(text) {
       pausedRef.current = true;
       const outcome = onScanRef.current(text);
       setResult(outcome);
+
+      const final = outcome.settled ? await outcome.settled : outcome;
+      if (cancelled) return;
+      setResult(final);
+
       setTimeout(() => {
         setResult(null);
         pausedRef.current = false;

@@ -4,7 +4,7 @@ function initials(person) {
   return (a + b).toUpperCase();
 }
 
-function formatTime(iso) {
+export function formatTime(iso) {
   if (!iso) return "";
   return new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 }

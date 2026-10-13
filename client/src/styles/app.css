@@ -463,6 +463,10 @@ input {
   background: color-mix(in srgb, var(--success) 92%, transparent);
 }
 
+.scanner__result--pending {
+  background: color-mix(in srgb, var(--knak-graphite) 92%, transparent);
+}
+
 .scanner__result--error {
   background: color-mix(in srgb, var(--danger) 92%, transparent);
 }
