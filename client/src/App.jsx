@@ -25,6 +25,15 @@ function useToast() {
 // generated and ignore anything else.
 const QR_PREFIX = "knak-marketo-id=";
 
+// `people` is a plain object, so people["__proto__"] returns Object.prototype
+// rather than undefined — truthy, and every `.status = ...` written to it lands
+// on every object in the process. "constructor" and "hasOwnProperty" get in the
+// same way. Every lookup keyed by something a user supplied goes through here.
+function findPerson(people, id) {
+  if (!people || id == null) return null;
+  return Object.hasOwn(people, id) ? people[id] : null;
+}
+
 export default function App() {
   const [state, setState] = useState(null);
   const [tab, setTab] = useState("registered");
@@ -192,7 +201,7 @@ export default function App() {
     } catch (err) {
       if (err instanceof NetworkError) {
         applyLocally((prev) => {
-          const person = prev.people[id];
+          const person = findPerson(prev.people, id);
           if (!person) return prev;
           return { ...prev, people: { ...prev.people, [id]: { ...person, status: "checked-in", checkedInAt: new Date().toISOString() } } };
         });
@@ -208,7 +217,7 @@ export default function App() {
 
   async function handleUndo(id) {
     const programId = state.programId;
-    const person = state.people[id];
+    const person = findPerson(state.people, id);
     try {
       await api.undoCheckIn(id, programId);
       await refresh();
@@ -220,7 +229,9 @@ export default function App() {
             delete people[id];
             return { ...prev, people };
           }
-          return { ...prev, people: { ...prev.people, [id]: { ...prev.people[id], status: "registered", checkedInAt: null } } };
+          const current = findPerson(prev.people, id);
+          if (!current) return prev;
+          return { ...prev, people: { ...prev.people, [id]: { ...current, status: "registered", checkedInAt: null } } };
         });
         enqueue({ type: "undo", personId: id, programId });
         setPendingCount(getQueue().length);
@@ -297,8 +308,11 @@ export default function App() {
       return { status: "error", message: "Not a recognized check-in code" };
     }
 
+    // Marketo lead ids are numeric, and this is the one id a stranger can hand
+    // to staff on a printed badge — so it is checked for shape before it is
+    // used as a key at all, not only for membership.
     const id = text.slice(QR_PREFIX.length).trim();
-    const person = state?.people?.[id];
+    const person = /^\d+$/.test(id) ? findPerson(state?.people, id) : null;
     if (!person) {
       return { status: "error", message: "Not found — pull registrants or add as walk-in" };
     }
