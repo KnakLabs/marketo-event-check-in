@@ -67,17 +67,36 @@ Why not encode more than the id:
   embedded in the code would show the wrong thing forever, while a
   live local lookup is always as current as the last pull.
 - Looking the id up against the currently-loaded attendee list means a
-  scan is actually *verified* against who's registered for this event,
-  not just blindly trusted — a QR that doesn't match anyone in the
-  current list surfaces a clear "not found" state instead of silently
-  checking someone in on unverified data.
+  scan is checked against who's registered for this event — a code that
+  matches nobody in the current list surfaces a clear "not found" state
+  instead of checking in someone who isn't on it.
 
 Why the `knak-marketo-id=` prefix specifically: a bare number is a
 collision risk — any unrelated QR code in the world that happens to
 decode to a number could accidentally match a real lead id and check
-the wrong person in. The prefix lets the scanner recognize and act
-only on QR codes this app actually generated, and cleanly ignore
-everything else.
+the wrong person in. The prefix lets the scanner ignore codes that were
+never meant for it.
+
+### What scanning does not prove
+
+**A badge is not authenticated.** The prefix is a format filter, not a
+signature, and the payload is just a Marketo lead id — which are
+sequential integers. Anyone who knows or guesses a registrant's id can
+print a code that scans successfully, so a scan proves *that id is
+registered for this event*, not *that this person is who the badge
+says*.
+
+What stands between that and a false check-in is the staff member
+seeing the name on screen. That is thinner than it sounds, because the
+whole point of scanning is not having to search.
+
+Closing it properly means signing the payload — the generator in
+`KnakLabs/marketo-self-service-flow-steps` emitting
+`knak-marketo-id=<id>.<hmac>` and the **server** verifying it, with the
+secret never reaching the client bundle. Until that exists, treat
+scanning as a fast path for cooperative attendees rather than an
+access-control mechanism, and keep the name check meaningful at doors
+where it matters.
 
 ## Walk-in email lookup
 
