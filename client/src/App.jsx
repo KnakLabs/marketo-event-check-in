@@ -2,8 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import Fuse from "fuse.js";
 import { api, AuthError, NetworkError, getCurrentProgram } from "./api.js";
 import { enqueue, getQueue, drainQueue } from "./offlineQueue.js";
-import PersonRow from "./components/PersonRow.jsx";
+import PersonRow, { formatTime } from "./components/PersonRow.jsx";
 import WalkInModal from "./components/WalkInModal.jsx";
+import QrScanModal from "./components/QrScanModal.jsx";
 import SyncModal from "./components/SyncModal.jsx";
 import EventPicker from "./components/EventPicker.jsx";
 import LoginScreen from "./components/LoginScreen.jsx";
@@ -19,12 +20,29 @@ function useToast() {
   return [message, setMessage];
 }
 
+// See README "QR code check-in" — only the Marketo lead id is encoded.
+// The prefix is a format filter, not a signature: it stops an unrelated QR
+// code that happens to decode to a number from matching a real lead id. It
+// proves nothing about who printed the badge, and lead ids are sequential,
+// so a scan says "this id is registered for this event" and no more.
+const QR_PREFIX = "knak-marketo-id=";
+
+// `people` is a plain object, so people["__proto__"] returns Object.prototype
+// rather than undefined — truthy, and every `.status = ...` written to it lands
+// on every object in the process. "constructor" and "hasOwnProperty" get in the
+// same way. Every lookup keyed by something a user supplied goes through here.
+function findPerson(people, id) {
+  if (!people || id == null) return null;
+  return Object.hasOwn(people, id) ? people[id] : null;
+}
+
 export default function App() {
   const [state, setState] = useState(null);
   const [tab, setTab] = useState("registered");
   const [query, setQuery] = useState("");
   const [pulling, setPulling] = useState(false);
   const [showWalkIn, setShowWalkIn] = useState(false);
+  const [showScanner, setShowScanner] = useState(false);
   const [showSync, setShowSync] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState(null);
@@ -173,30 +191,35 @@ export default function App() {
   // never reached the server — applying it eagerly for every error would
   // leave the UI showing success for a genuine rejection too, uncorrected
   // until the next poll happens to run.
+  // Returns what happened so a caller that shows its own confirmation — the
+  // scanner — can report the truth rather than assume success. The tile button
+  // ignores it and reads the toast, as before.
   async function handleCheckIn(id) {
     const programId = state.programId;
     try {
       await api.checkIn(id, programId);
       await refresh();
+      return { ok: true };
     } catch (err) {
       if (err instanceof NetworkError) {
         applyLocally((prev) => {
-          const person = prev.people[id];
+          const person = findPerson(prev.people, id);
           if (!person) return prev;
           return { ...prev, people: { ...prev.people, [id]: { ...person, status: "checked-in", checkedInAt: new Date().toISOString() } } };
         });
         enqueue({ type: "checkin", personId: id, programId });
         setPendingCount(getQueue().length);
         setToast("Offline — check-in saved, will sync once back online");
-      } else {
-        handleError(err);
+        return { ok: true, offline: true };
       }
+      handleError(err);
+      return { ok: false, message: err.message };
     }
   }
 
   async function handleUndo(id) {
     const programId = state.programId;
-    const person = state.people[id];
+    const person = findPerson(state.people, id);
     try {
       await api.undoCheckIn(id, programId);
       await refresh();
@@ -208,7 +231,9 @@ export default function App() {
             delete people[id];
             return { ...prev, people };
           }
-          return { ...prev, people: { ...prev.people, [id]: { ...prev.people[id], status: "registered", checkedInAt: null } } };
+          const current = findPerson(prev.people, id);
+          if (!current) return prev;
+          return { ...prev, people: { ...prev.people, [id]: { ...current, status: "registered", checkedInAt: null } } };
         });
         enqueue({ type: "undo", personId: id, programId });
         setPendingCount(getQueue().length);
@@ -272,6 +297,58 @@ export default function App() {
       setShowWalkIn(false);
       setToast("Offline — check-in saved, will sync once back online");
     }
+  }
+
+  // The name shown in the confirmation always comes from this device's own
+  // already-pulled registrant list, never from the code itself — so it is
+  // current, and a code matching nobody on the list is refused. That is a
+  // check against the registrant list, not proof the badge is genuine; the
+  // name on screen is what a staff member has to match to the person.
+  // Synchronous and instant: no API call needed for the lookup, only for the
+  // check-in itself, which runs the same as a tap and gets the same offline
+  // handling.
+  function handleScan(text) {
+    if (!text.startsWith(QR_PREFIX)) {
+      return { status: "error", message: "Not a recognized check-in code" };
+    }
+
+    // Marketo lead ids are numeric, and this is the one id a stranger can hand
+    // to staff on a printed badge — so it is checked for shape before it is
+    // used as a key at all, not only for membership.
+    const id = text.slice(QR_PREFIX.length).trim();
+    const person = /^\d+$/.test(id) ? findPerson(state?.people, id) : null;
+    if (!person) {
+      return { status: "error", message: "Not found — pull registrants or add as walk-in" };
+    }
+
+    const name = `${person.firstName} ${person.lastName}`.trim() || person.email;
+
+    // Checking someone in again overwrites checkedInAt, which is the arrival
+    // time the Marketo sync reports, so a second scan reports their time
+    // instead of rewriting it. Scanning the same badge twice at a busy door is
+    // the ordinary mistake, and the tile button can't make it — it only
+    // renders on the Registered tab.
+    //
+    // This reads status out of the people map, which only refreshes once the
+    // check-in below has been round-tripped, so `settled` has to be waited on
+    // before the scanner looks again or a second scan on a slow connection
+    // reads a stale "registered" and overwrites the time this guard protects.
+    if (person.status === "checked-in") {
+      return { status: "success", message: `${name} — already checked in ${formatTime(person.checkedInAt)}` };
+    }
+
+    // The name resolves locally and instantly, so it is shown straight away and
+    // the outcome replaces it. Staff can see they scanned the right badge
+    // without waiting for the network to agree.
+    return {
+      status: "pending",
+      message: `${name} — checking in…`,
+      settled: handleCheckIn(id).then((outcome) => {
+        if (!outcome.ok) return { status: "error", message: `${name} — ${outcome.message}` };
+        if (outcome.offline) return { status: "success", message: `${name} — saved offline` };
+        return { status: "success", message: `${name} Checked-In` };
+      }),
+    };
   }
 
   // Sync is never queued for later like check-ins/undos are — it's a
@@ -407,12 +484,19 @@ export default function App() {
         ))}
       </div>
 
+      <button className="fab fab--camera" onClick={() => setShowScanner(true)} aria-label="Scan a badge">
+        📷
+      </button>
       <button className="fab" onClick={() => setShowWalkIn(true)} aria-label="Add walk-in">
         +
       </button>
 
       {showWalkIn && (
         <WalkInModal onClose={() => setShowWalkIn(false)} onSubmit={handleWalkIn} onLookupEmail={handleLookupEmail} />
+      )}
+
+      {showScanner && (
+        <QrScanModal onScan={handleScan} onClose={() => setShowScanner(false)} />
       )}
 
       {showSync && (

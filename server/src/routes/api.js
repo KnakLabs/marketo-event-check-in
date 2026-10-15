@@ -3,6 +3,21 @@ import { loadEventState, saveEventState, resetEventState } from "../db.js";
 import * as marketo from "../marketo.js";
 import { withLock } from "../lock.js";
 
+// `people` comes back from JSON.parse as a plain object, so people["__proto__"]
+// returns Object.prototype rather than undefined. It is truthy, so the
+// not-found guard passes, and `person.status = "checked-in"` then writes onto
+// every object in this process until it restarts. "constructor" and
+// "hasOwnProperty" get through identically.
+//
+// Every lookup keyed by something the caller supplied goes through here. An
+// own-property check rather than a null-prototype map, because the map is
+// rebuilt by JSON.parse on every load and a prototype set in one place is
+// easy to lose in another.
+function findPerson(people, id) {
+  if (!people || id == null) return null;
+  return Object.hasOwn(people, id) ? people[id] : null;
+}
+
 // Every route below that reads or mutates an event's state takes an
 // explicit programId from the request — never a shared "currently active
 // program." There is no such thing as a server-wide active event: each
@@ -228,8 +243,17 @@ router.post("/checkin/:id", async (req, res) => {
 
   const result = await withLock(`event:${programId}`, () => {
     const state = loadEventState(programId);
-    const person = state.people[req.params.id];
+    const person = findPerson(state.people, req.params.id);
     if (!person) return { status: 404, body: { error: "Person not found" } };
+
+    // Already checked in: keep the first arrival time rather than stamping a
+    // new one. The client refuses a second scan, but that guard only covers
+    // one device - two phones at the door, a device working from stale state,
+    // or a direct API call all reach here, and checkedInAt is the number the
+    // Marketo sync reports as when this person arrived.
+    if (person.status === "checked-in") {
+      return { status: 200, body: person };
+    }
 
     person.status = "checked-in";
     person.checkedInAt = timestamp();
@@ -245,7 +269,7 @@ router.post("/checkin/:id/undo", async (req, res) => {
 
   const result = await withLock(`event:${programId}`, () => {
     const state = loadEventState(programId);
-    const person = state.people[req.params.id];
+    const person = findPerson(state.people, req.params.id);
     if (!person) return { status: 404, body: { error: "Person not found" } };
 
     if (person.source === "walkin") {
@@ -316,7 +340,7 @@ router.post("/walkin", async (req, res) => {
     const state = loadEventState(programId);
     const key = `walkin:${email.trim().toLowerCase()}`;
 
-    if (state.people[key]) {
+    if (findPerson(state.people, key)) {
       return { status: 409, body: { error: "This person is already checked in" } };
     }
 

@@ -3,3 +3,6 @@ node_modules/
 .idea/
 server/.env
 server/data/
+
+# Vite build output - rebuilt from source every time, never committed
+dist/
