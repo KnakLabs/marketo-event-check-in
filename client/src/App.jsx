@@ -20,9 +20,11 @@ function useToast() {
   return [message, setMessage];
 }
 
-// See README "QR code check-in" — only the Marketo lead id is encoded,
-// prefixed so the scanner can recognize a code this app actually
-// generated and ignore anything else.
+// See README "QR code check-in" — only the Marketo lead id is encoded.
+// The prefix is a format filter, not a signature: it stops an unrelated QR
+// code that happens to decode to a number from matching a real lead id. It
+// proves nothing about who printed the badge, and lead ids are sequential,
+// so a scan says "this id is registered for this event" and no more.
 const QR_PREFIX = "knak-marketo-id=";
 
 // `people` is a plain object, so people["__proto__"] returns Object.prototype
@@ -297,12 +299,14 @@ export default function App() {
     }
   }
 
-  // The name shown in the confirmation always comes from this device's
-  // own already-pulled registrant list, never from the code itself, so a
-  // scan is verified against who's actually registered for this event
-  // rather than trusted blindly. Synchronous and instant: no API call
-  // needed for the lookup, only for the check-in itself, which runs the
-  // same as a tap and gets the same offline handling.
+  // The name shown in the confirmation always comes from this device's own
+  // already-pulled registrant list, never from the code itself — so it is
+  // current, and a code matching nobody on the list is refused. That is a
+  // check against the registrant list, not proof the badge is genuine; the
+  // name on screen is what a staff member has to match to the person.
+  // Synchronous and instant: no API call needed for the lookup, only for the
+  // check-in itself, which runs the same as a tap and gets the same offline
+  // handling.
   function handleScan(text) {
     if (!text.startsWith(QR_PREFIX)) {
       return { status: "error", message: "Not a recognized check-in code" };

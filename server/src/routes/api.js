@@ -246,6 +246,15 @@ router.post("/checkin/:id", async (req, res) => {
     const person = findPerson(state.people, req.params.id);
     if (!person) return { status: 404, body: { error: "Person not found" } };
 
+    // Already checked in: keep the first arrival time rather than stamping a
+    // new one. The client refuses a second scan, but that guard only covers
+    // one device - two phones at the door, a device working from stale state,
+    // or a direct API call all reach here, and checkedInAt is the number the
+    // Marketo sync reports as when this person arrived.
+    if (person.status === "checked-in") {
+      return { status: 200, body: person };
+    }
+
     person.status = "checked-in";
     person.checkedInAt = timestamp();
     saveEventState(state);
