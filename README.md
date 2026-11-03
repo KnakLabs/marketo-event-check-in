@@ -1,6 +1,6 @@
 # Marketo Event Check-In
 
-Mobile/tablet-friendly event check-in app, branded with the Knak design
+Mobile/tablet-friendly event check-in app, branded with the [Knak](https://knak.com?utm_source=github&utm_medium=referral&utm_campaign=knak-labs-ong) design
 system, synced to a Marketo program.
 
 - **server/** — Node/Express API. Holds the Marketo credentials (never
@@ -190,5 +190,15 @@ if you can.
 ## License
 
 This project's source code is MIT licensed — see [LICENSE](LICENSE). The
-Knak name, logo, and branding are trademarks of Knak and are not covered
-by that license.
+Knak name, logo, and branding are trademarks of [Knak](https://knak.com?utm_source=github&utm_medium=referral&utm_campaign=knak-labs-ong) and are not
+covered by that license.
+
+## Built at Knak
+
+[Knak](https://knak.com?utm_source=github&utm_medium=referral&utm_campaign=knak-labs-ong)
+is the agentic production layer for enterprise marketing: where marketers and AI
+agents build on-brand emails and landing pages, then sync them to the team's
+marketing automation platform.
+
+This app is one of the internal tools we build on top of that stack, published
+so you can see how we approach the problem.
